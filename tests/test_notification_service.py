@@ -1,5 +1,6 @@
 """Tests for NotificationService"""
 import asyncio
+import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
 from backend.services.notification_service import NotificationService
 

@@ -102,7 +102,13 @@ async def _run_single_bot(name: str, token: str):
 
         await application.initialize()
         await application.start()
-        await application.updater.start_polling()
+        # Avoid Telegram 409 Conflict caused by overlapping getUpdates requests.
+        await application.updater.start_polling(
+            # Reduce overlapping getUpdates calls (409 Conflict).
+            poll_interval=15.0,
+            timeout=5,
+            drop_pending_updates=True,
+        )
         update_bot_status(bot_name=name, is_running=True, error=None)
         logger.info("Bot '%s' is running", name)
 

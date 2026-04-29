@@ -8,6 +8,30 @@ logger = logging.getLogger("backend")
 
 class NotificationService:
     TELEGRAM_API_URL = "https://api.telegram.org"
+
+    @staticmethod
+    def _extract_chat_id(user) -> Optional[int]:
+        """Extract Telegram chat/user ID from a user object or mapping."""
+        telegram_user_id = None
+
+        if hasattr(user, "telegram_user_id"):
+            telegram_user_id = getattr(user, "telegram_user_id")
+        elif isinstance(user, dict):
+            telegram_user_id = user.get("telegram_user_id")
+
+        if telegram_user_id is None and hasattr(user, "telegram_id"):
+            telegram_user_id = getattr(user, "telegram_id")
+        elif telegram_user_id is None and isinstance(user, dict):
+            telegram_user_id = user.get("telegram_id")
+
+        if telegram_user_id is None:
+            return None
+
+        try:
+            return int(telegram_user_id)
+        except (TypeError, ValueError):
+            logger.warning("Invalid telegram user id: %s", telegram_user_id)
+            return None
     
     @staticmethod
     async def _send_telegram_message(chat_id: int, message: str, parse_mode: str = "HTML") -> bool:
@@ -83,10 +107,11 @@ class NotificationService:
             message = NotificationService._format_alert_message(alert, server_name)
             
             for user in users:
-                chat_id = user.telegram_id if hasattr(user, 'telegram_id') else user.get('telegram_id')
+                chat_id = NotificationService._extract_chat_id(user)
                 if not chat_id:
-                    logger.warning(f"User {user} has no telegram_id")
-                    results[chat_id] = False
+                    logger.warning("User %s has no telegram user id", user)
+                    user_key = getattr(user, "id", None) if not isinstance(user, dict) else user.get("id")
+                    results[user_key if user_key is not None else -1] = False
                     continue
                 
                 success = await NotificationService._send_telegram_message(chat_id, message)
@@ -107,7 +132,7 @@ class NotificationService:
                 from backend.models.database import SessionLocal, User
                 db = SessionLocal()
                 user = db.query(User).filter(User.id == user_id).first()
-                telegram_id = user.telegram_id if user else None
+                telegram_id = NotificationService._extract_chat_id(user) if user else None
                 db.close()
             except Exception as e:
                 logger.error(f"Failed to get user {user_id}: {str(e)}")
@@ -126,7 +151,7 @@ class NotificationService:
             from backend.models.database import SessionLocal, User
             db = SessionLocal()
             
-            # Get all active users with telegram_id
+            # Get all active users with a Telegram user/chat id
             query = db.query(User).filter(User.is_active == True)
             if exclude_user_ids:
                 query = query.filter(~User.id.in_(exclude_user_ids))

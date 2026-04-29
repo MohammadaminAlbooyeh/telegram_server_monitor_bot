@@ -132,13 +132,13 @@ async def update_alert(
         
         update_data = alert_update.dict(exclude_unset=True)
         
-        if update_data.get("is_acknowledged"):
-            alert.is_acknowledged = True
-            alert.acknowledged_at = datetime.utcnow()
-        
-        if update_data.get("is_resolved"):
-            alert.is_resolved = True
-            alert.resolved_at = datetime.utcnow()
+        if "is_acknowledged" in update_data:
+            alert.is_acknowledged = update_data["is_acknowledged"]
+            alert.acknowledged_at = datetime.utcnow() if update_data["is_acknowledged"] else None
+
+        if "is_resolved" in update_data:
+            alert.is_resolved = update_data["is_resolved"]
+            alert.resolved_at = datetime.utcnow() if update_data["is_resolved"] else None
         
         db.commit()
         db.refresh(alert)
