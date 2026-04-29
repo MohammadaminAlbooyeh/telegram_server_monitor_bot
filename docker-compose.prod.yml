@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: monitoring_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-monitoring_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password}
+      POSTGRES_DB: ${DB_NAME:-monitoring_bot}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-monitoring_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - monitoring_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: monitoring_backend
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-monitoring_user}:${DB_PASSWORD:-secure_password}@postgres:5432/${DB_NAME:-monitoring_bot}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
+      ALLOWED_USERS: ${ALLOWED_USERS}
+      DEBUG: ${DEBUG:-False}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      RATE_LIMIT_REQUESTS_PER_MINUTE: ${RATE_LIMIT_REQUESTS_PER_MINUTE:-60}
+    ports:
+      - "8000:8000"
+      - "8443:8443"  # HTTPS port
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - logs:/app/logs
+      - ./certs:/app/certs:ro  # SSL certificates
+    networks:
+      - monitoring_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    command: python -m backend.main
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: monitoring_bot
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
+      ALLOWED_USERS: ${ALLOWED_USERS}
+      DATABASE_URL: postgresql://${DB_USER:-monitoring_user}:${DB_PASSWORD:-secure_password}@postgres:5432/${DB_NAME:-monitoring_bot}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      - backend
+      - postgres
+    volumes:
+      - .:/app
+      - logs:/app/logs
+    networks:
+      - monitoring_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    command: python -m telegram_bot.bot
+
+  # Optional: Nginx reverse proxy for SSL termination
+  nginx:
+    image: nginx:alpine
+    container_name: monitoring_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+      - logs:/var/log/nginx
+    depends_on:
+      - backend
+    networks:
+      - monitoring_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+  logs:
+
+networks:
+  monitoring_network:
+    driver: bridge

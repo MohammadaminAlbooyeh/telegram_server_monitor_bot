@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: monitoring_postgres
+    environment:
+      POSTGRES_USER: monitoring_user
+      POSTGRES_PASSWORD: secure_password
+      POSTGRES_DB: monitoring_bot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monitoring_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - monitoring_network
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: monitoring_backend
+    environment:
+      DATABASE_URL: postgresql://monitoring_user:secure_password@postgres:5432/monitoring_bot
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      BACKEND_URL: http://backend:8000
+      ALLOWED_USERS: ${ALLOWED_USERS}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - logs:/app/logs
+    networks:
+      - monitoring_network
+    restart: unless-stopped
+    command: python -m backend.main
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: monitoring_bot
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      BACKEND_URL: http://backend:8000
+      ALLOWED_USERS: ${ALLOWED_USERS}
+      DATABASE_URL: postgresql://monitoring_user:secure_password@postgres:5432/monitoring_bot
+    depends_on:
+      - backend
+      - postgres
+    volumes:
+      - .:/app
+      - logs:/app/logs
+    networks:
+      - monitoring_network
+    restart: unless-stopped
+    command: python -m telegram_bot.bot
+
+volumes:
+  postgres_data:
+  logs:
+
+networks:
+  monitoring_network:
+    driver: bridge
