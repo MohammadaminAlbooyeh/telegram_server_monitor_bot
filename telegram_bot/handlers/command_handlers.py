@@ -5,8 +5,11 @@ from telegram.ext import ContextTypes
 
 from config.settings import ALLOWED_USERS
 from telegram_bot.formatters import BotFormatters
+from backend.schemas.server import ServerCreate
 
 logger = logging.getLogger("telegram_bot")
+
+ADD_SERVER_NAME, ADD_SERVER_HOSTNAME, ADD_SERVER_PORT, ADD_SERVER_USERNAME, ADD_SERVER_PASSWORD = range(5)
 
 class CommandHandlers:
     """Handle bot commands"""
@@ -21,6 +24,7 @@ class CommandHandlers:
             [InlineKeyboardButton("📊 Status", callback_data="status")],
             [InlineKeyboardButton("📈 Metrics", callback_data="metrics")],
             [InlineKeyboardButton("⚠️ Alerts", callback_data="alerts")],
+            [InlineKeyboardButton("➕ Add Server", callback_data="add_server")],
             [InlineKeyboardButton("❓ Help", callback_data="help")]
         ])
 
@@ -95,8 +99,12 @@ class CommandHandlers:
         
         servers = await self.api_client.get_servers()
         
+        if servers is None:
+            await update.message.reply_text("⚠️ Backend is unreachable.")
+            return
+
         if not servers:
-            await update.message.reply_text("❌ No servers configured")
+            await update.message.reply_text("❌ No servers configured.")
             return
         
         keyboard = []
@@ -144,7 +152,8 @@ class CommandHandlers:
             "📊 *Monitoring*\n"
             "/status - Show all servers status\n"
             "/metrics - View server metrics\n"
-            "/alerts - Show recent alerts"
+            "/alerts - Show recent alerts\n"
+            "/addserver - Add a new server"
         )
         
         await update.message.reply_text(
@@ -178,8 +187,14 @@ class CommandHandlers:
                 await query.edit_message_text("⚠️ Bot status is unavailable or backend is unreachable.")
         
         elif callback_data == "metrics":
+            await query.edit_message_text("🔄 Loading metrics...")
             servers = await self.api_client.get_servers()
-            if servers:
+            if servers is None:
+                await query.edit_message_text(
+                    "⚠️ Backend is unreachable.",
+                    reply_markup=self._back_keyboard()
+                )
+            elif servers:
                 keyboard = []
                 for server in servers:
                     keyboard.append([
@@ -196,9 +211,15 @@ class CommandHandlers:
                     parse_mode='Markdown',
                     reply_markup=reply_markup
                 )
+            else:
+                await query.edit_message_text(
+                    "❌ No servers configured.",
+                    reply_markup=self._back_keyboard()
+                )
         
         elif callback_data.startswith("metrics_"):
             server_id = int(callback_data.split("_")[1])
+            await query.edit_message_text("🔄 Loading server metrics...")
             metric = await self.api_client.get_metrics(server_id)
             message = self.formatters.format_metric(metric)
             await query.edit_message_text(
@@ -233,9 +254,101 @@ class CommandHandlers:
                 reply_markup=self._back_keyboard()
             )
         
+        elif callback_data == "add_server":
+            await query.edit_message_text(
+                "➕ *Add Server*\n\nSend the server name:",
+                parse_mode='Markdown'
+            )
+            return ADD_SERVER_NAME
+
         elif callback_data == "menu":
             await query.edit_message_text(
                 "🏠 *Main Menu*\n\nChoose an option:",
                 parse_mode='Markdown',
                 reply_markup=self._main_menu_keyboard()
             )
+
+    async def add_server_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Start add-server conversation"""
+        user = update.effective_user
+        if user.id not in ALLOWED_USERS:
+            if update.message:
+                await update.message.reply_text("❌ Unauthorized")
+            elif update.callback_query:
+                await update.callback_query.answer()
+                await update.callback_query.edit_message_text("❌ Unauthorized")
+            return
+
+        context.user_data["new_server"] = {}
+        prompt = "➕ *Add Server*\n\nSend the server name:"
+        if update.message:
+            await update.message.reply_text(prompt, parse_mode='Markdown')
+        elif update.callback_query:
+            await update.callback_query.answer()
+            await update.callback_query.edit_message_text(prompt, parse_mode='Markdown')
+        return ADD_SERVER_NAME
+
+    async def add_server_name(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        name = update.message.text.strip()
+        context.user_data["new_server"]["name"] = name
+        await update.message.reply_text("Send the hostname or IP address:")
+        return ADD_SERVER_HOSTNAME
+
+    async def add_server_hostname(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        hostname = update.message.text.strip()
+        context.user_data["new_server"]["hostname"] = hostname
+        await update.message.reply_text("Send the SSH port (or type `22`):", parse_mode='Markdown')
+        return ADD_SERVER_PORT
+
+    async def add_server_port(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            ssh_port = int(update.message.text.strip())
+        except ValueError:
+            await update.message.reply_text("Please send a valid port number.")
+            return ADD_SERVER_PORT
+
+        context.user_data["new_server"]["ssh_port"] = ssh_port
+        await update.message.reply_text("Send the SSH username:")
+        return ADD_SERVER_USERNAME
+
+    async def add_server_username(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        username = update.message.text.strip()
+        context.user_data["new_server"]["username"] = username
+        await update.message.reply_text("Send the SSH password:")
+        return ADD_SERVER_PASSWORD
+
+    async def add_server_password(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        password = update.message.text.strip()
+        data = context.user_data.get("new_server", {})
+        data["password"] = password
+        data.setdefault("is_active", True)
+        data.setdefault("ssh_port", 22)
+
+        try:
+            server = ServerCreate(**data)
+            result = await self.api_client.create_server(server.model_dump())
+            if result:
+                await update.message.reply_text(
+                    f"✅ Server *{result['name']}* added successfully.",
+                    parse_mode='Markdown',
+                    reply_markup=self._main_menu_keyboard()
+                )
+            else:
+                await update.message.reply_text(
+                    "❌ Failed to add server.",
+                    reply_markup=self._main_menu_keyboard()
+                )
+        except Exception as e:
+            logger.error("Failed to add server: %s", str(e))
+            await update.message.reply_text(
+                "❌ Invalid server data. Please try again.",
+                reply_markup=self._main_menu_keyboard()
+            )
+        finally:
+            context.user_data.pop("new_server", None)
+        return -1
+
+    async def add_server_cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        context.user_data.pop("new_server", None)
+        await update.message.reply_text("Cancelled.", reply_markup=self._main_menu_keyboard())
+        return -1

@@ -2,11 +2,18 @@ import logging
 import httpx
 import asyncio
 import time
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
 
 from config.settings import TELEGRAM_BOTS, BACKEND_URL
 from config.bot_status import update_bot_status
-from telegram_bot.handlers.command_handlers import CommandHandlers
+from telegram_bot.handlers.command_handlers import (
+    CommandHandlers,
+    ADD_SERVER_NAME,
+    ADD_SERVER_HOSTNAME,
+    ADD_SERVER_PORT,
+    ADD_SERVER_USERNAME,
+    ADD_SERVER_PASSWORD,
+)
 
 logger = logging.getLogger("telegram_bot")
 
@@ -133,6 +140,16 @@ class BotAPIClient:
             logger.error("Failed to create user: %s", str(e))
             return None
 
+    async def create_server(self, server_data: dict):
+        """Create a new server"""
+        try:
+            response = await self._client.post(f"{self.base_url}/api/servers", json=server_data)
+            self._cache.pop("servers", None)
+            return response.json() if response.status_code in (200, 201) else None
+        except Exception as e:
+            logger.error("Failed to create server: %s", str(e))
+            return None
+
 
 async def _run_single_bot(name: str, token: str):
     """Create and run one bot application."""
@@ -154,6 +171,24 @@ async def _run_single_bot(name: str, token: str):
         application.add_handler(CommandHandler("metrics", handlers.metrics))
         application.add_handler(CommandHandler("alerts", handlers.alerts))
         application.add_handler(CommandHandler("help", handlers.help))
+        application.add_handler(
+            ConversationHandler(
+                entry_points=[
+                    CommandHandler("addserver", handlers.add_server_start),
+                    CallbackQueryHandler(handlers.add_server_start, pattern="^add_server$")
+                ],
+                states={
+                    ADD_SERVER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_name)],
+                    ADD_SERVER_HOSTNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_hostname)],
+                    ADD_SERVER_PORT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_port)],
+                    ADD_SERVER_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_username)],
+                    ADD_SERVER_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_password)],
+                },
+                fallbacks=[CommandHandler("cancel", handlers.add_server_cancel)],
+                per_chat=True,
+                per_user=True,
+            )
+        )
         application.add_handler(CallbackQueryHandler(handlers.button_callback))
 
         await application.initialize()
