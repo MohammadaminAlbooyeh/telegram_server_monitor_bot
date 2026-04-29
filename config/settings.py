@@ -21,6 +21,7 @@ DEBUG = os.getenv("DEBUG", "False") == "True"
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_WEBHOOK_URL = os.getenv("TELEGRAM_WEBHOOK_URL", "")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+BOT_API_CACHE_TTL = float(os.getenv("BOT_API_CACHE_TTL", "30"))
 
 # Security Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")

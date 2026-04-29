@@ -96,15 +96,17 @@ class CommandHandlers:
         if user.id not in ALLOWED_USERS:
             await update.message.reply_text("❌ Unauthorized")
             return
+
+        loading_message = await update.message.reply_text("🔄 Loading servers...")
         
         servers = await self.api_client.get_servers()
         
         if servers is None:
-            await update.message.reply_text("⚠️ Backend is unreachable.")
+            await loading_message.edit_text("⚠️ Backend is unreachable.")
             return
 
         if not servers:
-            await update.message.reply_text("❌ No servers configured.")
+            await loading_message.edit_text("❌ No servers configured.")
             return
         
         keyboard = []
@@ -117,7 +119,7 @@ class CommandHandlers:
             ])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
+        await loading_message.edit_text(
             "📊 *Select server for metrics:*",
             parse_mode='Markdown',
             reply_markup=reply_markup

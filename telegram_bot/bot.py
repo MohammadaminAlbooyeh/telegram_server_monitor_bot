@@ -4,7 +4,7 @@ import asyncio
 import time
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
 
-from config.settings import TELEGRAM_BOTS, BACKEND_URL
+from config.settings import TELEGRAM_BOTS, BACKEND_URL, BOT_API_CACHE_TTL
 from config.bot_status import update_bot_status
 from telegram_bot.handlers.command_handlers import (
     CommandHandlers,
@@ -27,7 +27,7 @@ async def _heartbeat_loop(bot_name: str):
 class BotAPIClient:
     """Client to communicate with FastAPI backend"""
     
-    def __init__(self, base_url: str = BACKEND_URL, cache_ttl: float = 5.0):
+    def __init__(self, base_url: str = BACKEND_URL, cache_ttl: float = BOT_API_CACHE_TTL):
         self.base_url = base_url
         self.timeout = 6
         self.cache_ttl = cache_ttl
@@ -193,11 +193,11 @@ async def _run_single_bot(name: str, token: str):
 
         await application.initialize()
         await application.start()
-        # Avoid Telegram 409 Conflict caused by overlapping getUpdates requests.
         await application.updater.start_polling(
-            # Reduce overlapping getUpdates calls (409 Conflict).
-            poll_interval=15.0,
-            timeout=5,
+            # Keep long polling responsive. Telegram 409 conflicts are caused by
+            # multiple running bot instances, not by a short poll interval.
+            poll_interval=0.5,
+            timeout=10,
             drop_pending_updates=True,
         )
         update_bot_status(bot_name=name, is_running=True, error=None)
