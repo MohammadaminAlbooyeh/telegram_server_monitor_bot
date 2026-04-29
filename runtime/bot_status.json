@@ -2,24 +2,24 @@
   "bots": {
     "weatherbot": {
       "is_running": true,
-      "last_heartbeat": "2026-04-29T09:15:18.619994+00:00",
+      "last_heartbeat": "2026-04-29T11:51:24.140595+00:00",
       "error": null
     },
     "marketpricebot": {
       "is_running": true,
-      "last_heartbeat": "2026-04-29T09:15:18.699568+00:00",
+      "last_heartbeat": "2026-04-29T11:51:24.094732+00:00",
       "error": null
     },
     "taskmanagerbot": {
       "is_running": true,
-      "last_heartbeat": "2026-04-29T09:15:18.700320+00:00",
+      "last_heartbeat": "2026-04-29T11:51:24.139601+00:00",
       "error": null
     },
     "main": {
       "is_running": true,
-      "last_heartbeat": "2026-04-29T09:15:18.701009+00:00",
+      "last_heartbeat": "2026-04-29T11:51:24.097671+00:00",
       "error": null
     }
   },
-  "updated_at": "2026-04-29T09:15:18.701020+00:00"
+  "updated_at": "2026-04-29T11:51:24.140611+00:00"
 }

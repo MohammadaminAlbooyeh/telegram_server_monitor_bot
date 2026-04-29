@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
@@ -14,6 +15,19 @@ class CommandHandlers:
         self.api_client = api_client
         self.bot_name = bot_name or "telegram_bot"
         self.formatters = BotFormatters()
+
+    def _main_menu_keyboard(self) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("📊 Status", callback_data="status")],
+            [InlineKeyboardButton("📈 Metrics", callback_data="metrics")],
+            [InlineKeyboardButton("⚠️ Alerts", callback_data="alerts")],
+            [InlineKeyboardButton("❓ Help", callback_data="help")]
+        ])
+
+    def _back_keyboard(self) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ Back", callback_data="menu")]
+        ])
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
@@ -37,14 +51,11 @@ class CommandHandlers:
             f"Use /help to see available commands."
         )
         
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📊 Status", callback_data="status")],
-            [InlineKeyboardButton("📈 Metrics", callback_data="metrics")],
-            [InlineKeyboardButton("⚠️ Alerts", callback_data="alerts")],
-            [InlineKeyboardButton("❓ Help", callback_data="help")]
-        ])
-        
-        await update.message.reply_text(welcome_text, parse_mode='Markdown', reply_markup=keyboard)
+        await update.message.reply_text(
+            welcome_text,
+            parse_mode='Markdown',
+            reply_markup=self._main_menu_keyboard()
+        )
         logger.info(f"User started bot: {user.id}")
     
     async def status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -55,21 +66,21 @@ class CommandHandlers:
             await update.message.reply_text("❌ Unauthorized")
             return
         
-        await update.message.reply_text("🔄 Loading server status...")
+        await update.message.reply_text("🔄 Loading bot status...")
 
         try:
-            servers = await self.api_client.get_servers()
-            if not servers:
-                await update.message.reply_text("⚠️ No servers found or backend is unreachable.")
+            bots_status = await self.api_client.get_bots_status()
+            if not bots_status:
+                await update.message.reply_text("⚠️ Bot status is unavailable or backend is unreachable.")
                 return
 
-            message = "*Server Status*\n\n"
-            for server in servers:
-                metric = await self.api_client.get_metrics(server['id'])
-                message += self.formatters.format_server_status(server, metric)
-                message += "\n\n"
+            message = self.formatters.format_bots_status(bots_status)
 
-            await update.message.reply_text(message, parse_mode='Markdown')
+            await update.message.reply_text(
+                message,
+                parse_mode='Markdown',
+                reply_markup=self._back_keyboard()
+            )
         except Exception as e:
             logger.error("Failed to build /status response for %s: %s", self.bot_name, str(e))
             await update.message.reply_text("❌ Error loading status. Please try again.")
@@ -117,7 +128,11 @@ class CommandHandlers:
         alerts = await self.api_client.get_alerts(is_acknowledged=False)
         message = self.formatters.format_alerts(alerts)
         
-        await update.message.reply_text(message, parse_mode='Markdown')
+        await update.message.reply_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=self._back_keyboard()
+        )
     
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command"""
@@ -132,7 +147,11 @@ class CommandHandlers:
             "/alerts - Show recent alerts"
         )
         
-        await update.message.reply_text(help_text, parse_mode='Markdown')
+        await update.message.reply_text(
+            help_text,
+            parse_mode='Markdown',
+            reply_markup=self._back_keyboard()
+        )
     
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle button clicks"""
@@ -145,18 +164,18 @@ class CommandHandlers:
             return
         
         callback_data = query.data
-        
+
         if callback_data == "status":
-            servers = await self.api_client.get_servers()
-            if servers:
-                message = "*Server Status*\n\n"
-                for server in servers:
-                    metric = await self.api_client.get_metrics(server['id'])
-                    message += self.formatters.format_server_status(server, metric) + "\n\n"
-                
-                await query.edit_message_text(message, parse_mode='Markdown')
+            bots_status = await self.api_client.get_bots_status()
+            if bots_status:
+                message = self.formatters.format_bots_status(bots_status)
+                await query.edit_message_text(
+                    message,
+                    parse_mode='Markdown',
+                    reply_markup=self._back_keyboard()
+                )
             else:
-                await query.edit_message_text("⚠️ No servers found or backend is unreachable.")
+                await query.edit_message_text("⚠️ Bot status is unavailable or backend is unreachable.")
         
         elif callback_data == "metrics":
             servers = await self.api_client.get_servers()
@@ -169,6 +188,7 @@ class CommandHandlers:
                             callback_data=f"metrics_{server['id']}"
                         )
                     ])
+                keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="menu")])
                 
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.edit_message_text(
@@ -181,12 +201,20 @@ class CommandHandlers:
             server_id = int(callback_data.split("_")[1])
             metric = await self.api_client.get_metrics(server_id)
             message = self.formatters.format_metric(metric)
-            await query.edit_message_text(message, parse_mode='Markdown')
+            await query.edit_message_text(
+                message,
+                parse_mode='Markdown',
+                reply_markup=self._back_keyboard()
+            )
         
         elif callback_data == "alerts":
             alerts = await self.api_client.get_alerts(is_acknowledged=False)
             message = self.formatters.format_alerts(alerts)
-            await query.edit_message_text(message, parse_mode='Markdown')
+            await query.edit_message_text(
+                message,
+                parse_mode='Markdown',
+                reply_markup=self._back_keyboard()
+            )
         
         elif callback_data == "help":
             help_text = (
@@ -199,4 +227,15 @@ class CommandHandlers:
                 "/metrics - View metrics\n"
                 "/alerts - Show alerts"
             )
-            await query.edit_message_text(help_text, parse_mode='Markdown')
+            await query.edit_message_text(
+                help_text,
+                parse_mode='Markdown',
+                reply_markup=self._back_keyboard()
+            )
+        
+        elif callback_data == "menu":
+            await query.edit_message_text(
+                "🏠 *Main Menu*\n\nChoose an option:",
+                parse_mode='Markdown',
+                reply_markup=self._main_menu_keyboard()
+            )

@@ -114,7 +114,7 @@ docker-compose exec backend bash
 python scripts/setup_db.py
 
 # Seed test data (optional)
-python database/seed_data.py
+# Seed sample data has been removed; create servers through the API or admin UI.
 ```
 
 ## SSL/HTTPS Configuration

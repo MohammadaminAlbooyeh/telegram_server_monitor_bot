@@ -1,5 +1,6 @@
 import paramiko
 import logging
+import time
 from typing import Optional, Dict
 from config.settings import SSH_TIMEOUT
 
@@ -114,11 +115,38 @@ class MetricsCollector:
     def get_cpu_usage(self) -> float:
         """Get CPU usage percentage"""
         try:
-            output = self.ssh_handler.execute_command(
-                "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' | awk '{print 100 - $1}'"
+            first = self.ssh_handler.execute_command(
+                "awk '/^cpu / {print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat"
             )
-            if output:
-                return float(output.strip())
+            if not first:
+                return 0.0
+
+            time.sleep(0.1)
+
+            second = self.ssh_handler.execute_command(
+                "awk '/^cpu / {print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat"
+            )
+            if not second:
+                return 0.0
+
+            first_parts = first.strip().split()
+            second_parts = second.strip().split()
+            if len(first_parts) < 2 or len(second_parts) < 2:
+                return 0.0
+
+            first_total = float(first_parts[0])
+            first_idle = float(first_parts[1])
+            second_total = float(second_parts[0])
+            second_idle = float(second_parts[1])
+
+            total_delta = second_total - first_total
+            idle_delta = second_idle - first_idle
+
+            if total_delta <= 0:
+                return 0.0
+
+            usage = (1.0 - (idle_delta / total_delta)) * 100.0
+            return max(0.0, min(100.0, usage))
         except Exception as e:
             logger.warning(f"Failed to get CPU usage: {str(e)}")
         return 0.0

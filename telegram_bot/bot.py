@@ -1,6 +1,7 @@
 import logging
 import httpx
 import asyncio
+import time
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 
 from config.settings import TELEGRAM_BOTS, BACKEND_URL
@@ -19,16 +20,44 @@ async def _heartbeat_loop(bot_name: str):
 class BotAPIClient:
     """Client to communicate with FastAPI backend"""
     
-    def __init__(self, base_url: str = BACKEND_URL):
+    def __init__(self, base_url: str = BACKEND_URL, cache_ttl: float = 5.0):
         self.base_url = base_url
-        self.timeout = 10
+        self.timeout = 6
+        self.cache_ttl = cache_ttl
+        self._client = httpx.AsyncClient(timeout=self.timeout)
+        self._cache = {}
+
+    async def close(self):
+        await self._client.aclose()
+
+    def _get_cache(self, key):
+        cached = self._cache.get(key)
+        if not cached:
+            return None
+        expires_at, value = cached
+        if time.monotonic() >= expires_at:
+            self._cache.pop(key, None)
+            return None
+        return value
+
+    def _set_cache(self, key, value):
+        self._cache[key] = (time.monotonic() + self.cache_ttl, value)
+
+    async def _request_json(self, method: str, path: str, **kwargs):
+        response = await self._client.request(method, f"{self.base_url}{path}", **kwargs)
+        return response.json() if response.status_code in (200, 201) else None
     
     async def get_servers(self):
         """Get all servers"""
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(f"{self.base_url}/api/servers")
-                return response.json() if response.status_code == 200 else None
+            cache_key = "servers"
+            cached = self._get_cache(cache_key)
+            if cached is not None:
+                return cached
+
+            data = await self._request_json("GET", "/api/servers")
+            self._set_cache(cache_key, data)
+            return data
         except Exception as e:
             logger.error("Failed to get servers: %s", str(e))
             return None
@@ -36,9 +65,14 @@ class BotAPIClient:
     async def get_metrics(self, server_id: int):
         """Get latest metrics for server"""
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(f"{self.base_url}/api/metrics/{server_id}/current")
-                return response.json() if response.status_code == 200 else None
+            cache_key = f"metrics:{server_id}"
+            cached = self._get_cache(cache_key)
+            if cached is not None:
+                return cached
+
+            data = await self._request_json("GET", f"/api/metrics/{server_id}/current")
+            self._set_cache(cache_key, data)
+            return data
         except Exception as e:
             logger.error("Failed to get metrics: %s", str(e))
             return None
@@ -46,6 +80,11 @@ class BotAPIClient:
     async def get_alerts(self, server_id: int = None, is_acknowledged: bool = False):
         """Get recent alerts"""
         try:
+            cache_key = f"alerts:{server_id}:{is_acknowledged}"
+            cached = self._get_cache(cache_key)
+            if cached is not None:
+                return cached
+
             params = {
                 'is_acknowledged': is_acknowledged,
                 'limit': 10
@@ -53,26 +92,43 @@ class BotAPIClient:
             if server_id:
                 params['server_id'] = server_id
             
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(f"{self.base_url}/api/alerts", params=params)
-                return response.json() if response.status_code == 200 else None
+            response = await self._client.get(f"{self.base_url}/api/alerts", params=params)
+            data = response.json() if response.status_code == 200 else None
+            self._set_cache(cache_key, data)
+            return data
         except Exception as e:
             logger.error("Failed to get alerts: %s", str(e))
+            return None
+
+    async def get_bots_status(self):
+        """Get runtime status for all configured bots"""
+        try:
+            cache_key = "bots_status"
+            cached = self._get_cache(cache_key)
+            if cached is not None:
+                return cached
+
+            data = await self._request_json("GET", "/api/bots/status")
+            self._set_cache(cache_key, data)
+            return data
+        except Exception as e:
+            logger.error("Failed to get bots status: %s", str(e))
             return None
     
     async def create_user(self, telegram_user_id: str, telegram_username: str = None, telegram_first_name: str = None):
         """Register new user"""
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    f"{self.base_url}/api/users",
-                    json={
-                        'telegram_user_id': telegram_user_id,
-                        'telegram_username': telegram_username,
-                        'telegram_first_name': telegram_first_name
-                    }
-                )
-                return response.json() if response.status_code in [200, 201] else None
+            response = await self._client.post(
+                f"{self.base_url}/api/users",
+                json={
+                    'telegram_user_id': telegram_user_id,
+                    'telegram_username': telegram_username,
+                    'telegram_first_name': telegram_first_name
+                }
+            )
+            self._cache.pop("servers", None)
+            self._cache.pop("bots_status", None)
+            return response.json() if response.status_code in [200, 201] else None
         except Exception as e:
             logger.error("Failed to create user: %s", str(e))
             return None
@@ -126,6 +182,7 @@ async def _run_single_bot(name: str, token: str):
             await application.updater.stop()
             await application.stop()
             await application.shutdown()
+            await api_client.close()
             update_bot_status(bot_name=name, is_running=False, error=None)
     except Exception as e:
         logger.error("Error running bot '%s': %s", name, str(e))
