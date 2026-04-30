@@ -1,25 +1,27 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
     container_name: monitoring_postgres
     environment:
-      POSTGRES_USER: monitoring_user
-      POSTGRES_PASSWORD: secure_password
-      POSTGRES_DB: monitoring_bot
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${DB_USER:-monitoring_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password}
+      POSTGRES_DB: ${DB_NAME:-monitoring_bot}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U monitoring_user"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 20s
     networks:
       - monitoring_network
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   backend:
     build:
@@ -27,21 +29,45 @@ services:
       dockerfile: Dockerfile
     container_name: monitoring_backend
     environment:
-      DATABASE_URL: postgresql://monitoring_user:secure_password@postgres:5432/monitoring_bot
+      DATABASE_URL: postgresql://${DB_USER:-monitoring_user}:${DB_PASSWORD:-secure_password}@postgres:5432/${DB_NAME:-monitoring_bot}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      WEATHERBOT_TOKEN: ${WEATHERBOT_TOKEN:-}
+      MARKETPRICEBOT_TOKEN: ${MARKETPRICEBOT_TOKEN:-}
+      TASKMANAGERBOT_TOKEN: ${TASKMANAGERBOT_TOKEN:-}
       BACKEND_URL: http://backend:8000
       ALLOWED_USERS: ${ALLOWED_USERS}
+      BOT_STATUS_FILE: /app/runtime/bot_status.json
+      BOT_API_CACHE_TTL: ${BOT_API_CACHE_TTL:-30}
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      DEBUG: ${DEBUG:-False}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      METRICS_COLLECTION_INTERVAL: ${METRICS_COLLECTION_INTERVAL:-300}
+      ALERT_CHECK_INTERVAL: ${ALERT_CHECK_INTERVAL:-120}
+      SSH_TIMEOUT: ${SSH_TIMEOUT:-10}
+      SSH_RETRIES: ${SSH_RETRIES:-3}
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
-      - .:/app
       - logs:/app/logs
+      - runtime:/app/runtime
     networks:
       - monitoring_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     command: python -m backend.main
 
   bot:
@@ -50,24 +76,38 @@ services:
       dockerfile: Dockerfile
     container_name: monitoring_bot
     environment:
+      DATABASE_URL: postgresql://${DB_USER:-monitoring_user}:${DB_PASSWORD:-secure_password}@postgres:5432/${DB_NAME:-monitoring_bot}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      WEATHERBOT_TOKEN: ${WEATHERBOT_TOKEN:-}
+      MARKETPRICEBOT_TOKEN: ${MARKETPRICEBOT_TOKEN:-}
+      TASKMANAGERBOT_TOKEN: ${TASKMANAGERBOT_TOKEN:-}
       BACKEND_URL: http://backend:8000
       ALLOWED_USERS: ${ALLOWED_USERS}
-      DATABASE_URL: postgresql://monitoring_user:secure_password@postgres:5432/monitoring_bot
+      BOT_STATUS_FILE: /app/runtime/bot_status.json
+      BOT_API_CACHE_TTL: ${BOT_API_CACHE_TTL:-30}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
-      - backend
-      - postgres
+      backend:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     volumes:
-      - .:/app
       - logs:/app/logs
+      - runtime:/app/runtime
     networks:
       - monitoring_network
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     command: python -m telegram_bot.bot
 
 volumes:
   postgres_data:
   logs:
+  runtime:
 
 networks:
   monitoring_network:
