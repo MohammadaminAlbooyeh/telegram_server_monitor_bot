@@ -19,7 +19,27 @@
       "is_running": true,
       "last_heartbeat": "2026-04-29T20:36:10.504197+00:00",
       "error": null
+    },
+    "server_monitoring": {
+      "is_running": true,
+      "last_heartbeat": "2026-04-30T19:07:52.357195+00:00",
+      "error": null
+    },
+    "weather_bot": {
+      "is_running": true,
+      "last_heartbeat": "2026-04-30T19:07:52.352087+00:00",
+      "error": null
+    },
+    "marketprice_bot": {
+      "is_running": true,
+      "last_heartbeat": "2026-04-30T19:07:52.360309+00:00",
+      "error": null
+    },
+    "taskmanager_bot": {
+      "is_running": true,
+      "last_heartbeat": "2026-04-30T19:07:52.303780+00:00",
+      "error": null
     }
   },
-  "updated_at": "2026-04-29T20:36:10.506114+00:00"
+  "updated_at": "2026-04-30T19:07:52.360322+00:00"
 }
