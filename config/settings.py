@@ -18,7 +18,7 @@ API_PORT = int(os.getenv("API_PORT", "8000"))
 DEBUG = os.getenv("DEBUG", "False") == "True"
 
 # Telegram Bot Configuration
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+SERVER_MONITORING_BOT_TOKEN = os.getenv("SERVER_MONITORING_BOT_TOKEN", "")
 TELEGRAM_WEBHOOK_URL = os.getenv("TELEGRAM_WEBHOOK_URL", "")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 BOT_API_CACHE_TTL = float(os.getenv("BOT_API_CACHE_TTL", "30"))
@@ -53,15 +53,15 @@ SSH_RETRIES = int(os.getenv("SSH_RETRIES", "3"))
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
 
 # Multiple Telegram Bots Configuration
-WEATHERBOT_TOKEN = os.getenv("WEATHERBOT_TOKEN", "")
-MARKETPRICEBOT_TOKEN = os.getenv("MARKETPRICEBOT_TOKEN", "")
-TASKMANAGERBOT_TOKEN = os.getenv("TASKMANAGERBOT_TOKEN", "")
+WEATHER_BOT_TOKEN = os.getenv("WEATHER_BOT_TOKEN", "")
+MARKETPRICE_BOT_TOKEN = os.getenv("MARKETPRICE_BOT_TOKEN", "")
+TASKMANAGER_BOT_TOKEN = os.getenv("TASKMANAGER_BOT_TOKEN", "")
 
 TELEGRAM_BOTS = {
-    "main": TELEGRAM_BOT_TOKEN,
-    "weatherbot": WEATHERBOT_TOKEN,
-    "marketpricebot": MARKETPRICEBOT_TOKEN,
-    "taskmanagerbot": TASKMANAGERBOT_TOKEN,
+    "server_monitoring": SERVER_MONITORING_BOT_TOKEN,
+    "weather_bot": WEATHER_BOT_TOKEN,
+    "marketprice_bot": MARKETPRICE_BOT_TOKEN,
+    "taskmanager_bot": TASKMANAGER_BOT_TOKEN,
 }
 
 # Filter out empty tokens

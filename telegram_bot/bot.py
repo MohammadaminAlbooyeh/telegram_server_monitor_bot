@@ -6,14 +6,17 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Conv
 
 from config.settings import TELEGRAM_BOTS, BACKEND_URL, BOT_API_CACHE_TTL
 from config.bot_status import update_bot_status
-from telegram_bot.handlers.command_handlers import (
-    CommandHandlers,
+from telegram_bot.handlers.server_monitoring_handlers import (
+    CommandHandlers as ServerMonitoringHandlers,
     ADD_SERVER_NAME,
     ADD_SERVER_HOSTNAME,
     ADD_SERVER_PORT,
     ADD_SERVER_USERNAME,
     ADD_SERVER_PASSWORD,
 )
+from telegram_bot.handlers.weather_handlers import WeatherHandlers
+from telegram_bot.handlers.marketprice_handlers import MarketPriceHandlers
+from telegram_bot.handlers.taskmanager_handlers import TaskManagerHandlers
 
 logger = logging.getLogger("telegram_bot")
 
@@ -161,35 +164,54 @@ async def _run_single_bot(name: str, token: str):
     update_bot_status(bot_name=name, is_running=False, error=None)
     try:
         api_client = BotAPIClient(base_url=BACKEND_URL)
-        handlers = CommandHandlers(api_client, bot_name=name)
+
+        # Select appropriate handlers based on bot type
+        if name == "server_monitoring":
+            handlers = ServerMonitoringHandlers(api_client, bot_name=name)
+        elif name == "weather_bot":
+            handlers = WeatherHandlers(api_client, bot_name=name)
+        elif name == "marketprice_bot":
+            handlers = MarketPriceHandlers(api_client, bot_name=name)
+        elif name == "taskmanager_bot":
+            handlers = TaskManagerHandlers(api_client, bot_name=name)
+        else:
+            # Default to server monitoring handlers
+            handlers = ServerMonitoringHandlers(api_client, bot_name=name)
 
         application = Application.builder().token(token).build()
 
-        # Register same command handlers for each bot instance
-        application.add_handler(CommandHandler("start", handlers.start))
-        application.add_handler(CommandHandler("status", handlers.status))
-        application.add_handler(CommandHandler("metrics", handlers.metrics))
-        application.add_handler(CommandHandler("alerts", handlers.alerts))
-        application.add_handler(CommandHandler("help", handlers.help))
-        application.add_handler(
-            ConversationHandler(
-                entry_points=[
-                    CommandHandler("addserver", handlers.add_server_start),
-                    CallbackQueryHandler(handlers.add_server_start, pattern="^add_server$")
-                ],
-                states={
-                    ADD_SERVER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_name)],
-                    ADD_SERVER_HOSTNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_hostname)],
-                    ADD_SERVER_PORT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_port)],
-                    ADD_SERVER_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_username)],
-                    ADD_SERVER_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_password)],
-                },
-                fallbacks=[CommandHandler("cancel", handlers.add_server_cancel)],
-                per_chat=True,
-                per_user=True,
+        # Register handlers based on bot type
+        if name == "server_monitoring":
+            # Server monitoring specific commands
+            application.add_handler(CommandHandler("start", handlers.start))
+            application.add_handler(CommandHandler("status", handlers.status))
+            application.add_handler(CommandHandler("metrics", handlers.metrics))
+            application.add_handler(CommandHandler("alerts", handlers.alerts))
+            application.add_handler(CommandHandler("help", handlers.help))
+            application.add_handler(
+                ConversationHandler(
+                    entry_points=[
+                        CommandHandler("addserver", handlers.add_server_start),
+                        CallbackQueryHandler(handlers.add_server_start, pattern="^add_server$")
+                    ],
+                    states={
+                        ADD_SERVER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_name)],
+                        ADD_SERVER_HOSTNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_hostname)],
+                        ADD_SERVER_PORT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_port)],
+                        ADD_SERVER_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_username)],
+                        ADD_SERVER_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.add_server_password)],
+                    },
+                    fallbacks=[CommandHandler("cancel", handlers.add_server_cancel)],
+                    per_chat=True,
+                    per_user=True,
+                )
             )
-        )
-        application.add_handler(CallbackQueryHandler(handlers.button_callback))
+            application.add_handler(CallbackQueryHandler(handlers.button_callback))
+        else:
+            # Other bots: weather, market, task manager
+            application.add_handler(CommandHandler("start", handlers.start))
+            application.add_handler(CommandHandler("help", handlers.help))
+            application.add_handler(CallbackQueryHandler(handlers.button_callback))
 
         await application.initialize()
         await application.start()

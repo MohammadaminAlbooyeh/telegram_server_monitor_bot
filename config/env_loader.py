@@ -17,15 +17,15 @@ class EnvironmentLoader:
     # Required settings per environment
     REQUIRED_SETTINGS = {
         "development": {
-            "optional": ["SECRET_KEY", "TELEGRAM_BOT_TOKEN"]  # Can be test values
+            "optional": ["SECRET_KEY", "SERVER_MONITORING_BOT_TOKEN"]  # Can be test values
         },
         "staging": {
-            "required": ["SECRET_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_URL"],
+            "required": ["SECRET_KEY", "SERVER_MONITORING_BOT_TOKEN", "TELEGRAM_WEBHOOK_URL"],
             "optional": []
         },
         "production": {
             "required": [
-                "SECRET_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_URL",
+                "SECRET_KEY", "SERVER_MONITORING_BOT_TOKEN", "TELEGRAM_WEBHOOK_URL",
                 "DATABASE_URL", "BACKEND_URL"
             ],
             "optional": []

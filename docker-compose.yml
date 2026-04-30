@@ -23,17 +23,17 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  backend:
+   backend:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: monitoring_backend
     environment:
       DATABASE_URL: postgresql://${DB_USER:-monitoring_user}:${DB_PASSWORD:-secure_password}@postgres:5432/${DB_NAME:-monitoring_bot}
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      WEATHERBOT_TOKEN: ${WEATHERBOT_TOKEN:-}
-      MARKETPRICEBOT_TOKEN: ${MARKETPRICEBOT_TOKEN:-}
-      TASKMANAGERBOT_TOKEN: ${TASKMANAGERBOT_TOKEN:-}
+      SERVER_MONITORING_BOT_TOKEN: ${SERVER_MONITORING_BOT_TOKEN}
+      WEATHER_BOT_TOKEN: ${WEATHER_BOT_TOKEN:-}
+      MARKETPRICE_BOT_TOKEN: ${MARKETPRICE_BOT_TOKEN:-}
+      TASKMANAGER_BOT_TOKEN: ${TASKMANAGER_BOT_TOKEN:-}
       BACKEND_URL: http://backend:8000
       ALLOWED_USERS: ${ALLOWED_USERS}
       BOT_STATUS_FILE: /app/runtime/bot_status.json
@@ -70,17 +70,17 @@ services:
         max-file: "3"
     command: python -m backend.main
 
-  bot:
+   bot:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: monitoring_bot
     environment:
       DATABASE_URL: postgresql://${DB_USER:-monitoring_user}:${DB_PASSWORD:-secure_password}@postgres:5432/${DB_NAME:-monitoring_bot}
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      WEATHERBOT_TOKEN: ${WEATHERBOT_TOKEN:-}
-      MARKETPRICEBOT_TOKEN: ${MARKETPRICEBOT_TOKEN:-}
-      TASKMANAGERBOT_TOKEN: ${TASKMANAGERBOT_TOKEN:-}
+      SERVER_MONITORING_BOT_TOKEN: ${SERVER_MONITORING_BOT_TOKEN}
+      WEATHER_BOT_TOKEN: ${WEATHER_BOT_TOKEN:-}
+      MARKETPRICE_BOT_TOKEN: ${MARKETPRICE_BOT_TOKEN:-}
+      TASKMANAGER_BOT_TOKEN: ${TASKMANAGER_BOT_TOKEN:-}
       BACKEND_URL: http://backend:8000
       ALLOWED_USERS: ${ALLOWED_USERS}
       BOT_STATUS_FILE: /app/runtime/bot_status.json

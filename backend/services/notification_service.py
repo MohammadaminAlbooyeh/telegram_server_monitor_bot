@@ -2,7 +2,7 @@ import logging
 import httpx
 from typing import List, Optional, Dict
 from datetime import datetime
-from config.settings import TELEGRAM_BOT_TOKEN, BACKEND_URL
+from config.settings import SERVER_MONITORING_BOT_TOKEN, BACKEND_URL
 
 logger = logging.getLogger("backend")
 
@@ -36,11 +36,11 @@ class NotificationService:
     @staticmethod
     async def _send_telegram_message(chat_id: int, message: str, parse_mode: str = "HTML") -> bool:
         """Send message to Telegram chat"""
-        if not TELEGRAM_BOT_TOKEN:
-            logger.error("TELEGRAM_BOT_TOKEN not configured")
+        if not SERVER_MONITORING_BOT_TOKEN:
+            logger.error("SERVER_MONITORING_BOT_TOKEN not configured")
             return False
-        
-        url = f"{NotificationService.TELEGRAM_API_URL}/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+
+        url = f"{NotificationService.TELEGRAM_API_URL}/bot{SERVER_MONITORING_BOT_TOKEN}/sendMessage"
         payload = {
             "chat_id": chat_id,
             "text": message,

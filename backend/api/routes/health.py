@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.models.database import get_db, Server, Metric, Alert
-from config.settings import TELEGRAM_BOT_TOKEN
+from config.settings import TELEGRAM_BOTS
 
 logger = logging.getLogger("backend")
 router = APIRouter()
@@ -32,16 +32,17 @@ async def health_check(db: Session = Depends(get_db)):
         }
         health_status["status"] = "degraded"
     
-    # Check Telegram bot token
-    if TELEGRAM_BOT_TOKEN:
+    # Check Telegram bot tokens
+    configured_bots = sum(1 for token in TELEGRAM_BOTS.values() if token)
+    if configured_bots > 0:
         health_status["checks"]["telegram"] = {
             "status": "configured",
-            "message": "Telegram bot token configured"
+            "message": f"{configured_bots} Telegram bot(s) configured"
         }
     else:
         health_status["checks"]["telegram"] = {
             "status": "warning",
-            "message": "Telegram bot token not configured"
+            "message": "No Telegram bot tokens configured"
         }
     
     return health_status
